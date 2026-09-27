@@ -4,34 +4,42 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Todayland</title>
-<meta name="description" content="A new little world every day, grown from today's real news.">
+<meta name="description" content="A shared side-scrolling world grown from today's real news, region by region. Run, jump, and fire a cartoon laser.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧭</text></svg>">
-  <script type="module" crossorigin src="/todayland/assets/index-U4kcDFRb.js"></script>
-  <link rel="stylesheet" crossorigin href="/todayland/assets/index-DymiZjP-.css">
+  <script type="module" crossorigin src="/todayland/assets/index-BkUgWSW8.js"></script>
+  <link rel="stylesheet" crossorigin href="/todayland/assets/index-CM31vvki.css">
 </head>
 <body>
 <header>
  <h1>🧭 Todayland</h1>
- <p id="headline" class="headline">Loading today's headline…</p>
+ <p id="headline" class="headline">Loading today's world…</p>
 </header>
 <main>
  <div id="stage" class="stage">
   <canvas id="world"></canvas>
   <div id="hud" class="hud">
-   <span id="progress">0 / 0 found</span>
-   <span id="community" class="community" hidden></span>
+   <span id="progress">0 / 0 cleared</span>
+   <span id="players">1 exploring now</span>
   </div>
+  <div id="community" class="community" hidden></div>
   <div id="toast" class="toast" hidden></div>
+  <div class="touch-controls">
+   <button id="btn-left" class="touch-btn" aria-label="Left">◀</button>
+   <button id="btn-jump" class="touch-btn touch-jump" aria-label="Jump">▲</button>
+   <button id="btn-right" class="touch-btn" aria-label="Right">▶</button>
+  </div>
   <div id="complete" class="complete" hidden>
-   <h2>You found everything in today's world.</h2>
-   <p>Come back tomorrow for a new headline, a new place.</p>
+   <h2>You cleared today's world.</h2>
+   <p>Come back tomorrow for new headlines, new regions.</p>
    <button id="share">Copy a link to today's world</button>
   </div>
  </div>
- <p class="controls">Move with <b>WASD</b>, arrow keys, or drag/touch. Walk up to something to find it.</p>
- <p class="about">Every day, one real headline (from Wikipedia's news feed) is turned into a small world: its
-  words pick a biome, a mood and a handful of things hidden in it, all deterministic from the headline and the
-  date — so today's world is the same for everyone, and no image model is ever called. <a href="https://github.com/jay23606/todayland" target="_blank" rel="noopener">Source</a>.</p>
+ <p class="controls">Move with <b>A/D</b> or arrow keys (or the on-screen buttons), jump with <b>W</b>/<b>↑</b>/<b>space</b>. Click or tap anywhere to fire a laser.</p>
+ <p class="about">Every day, several real current headlines (from Wikipedia's news feed, standing in for
+  trending topics — there is no free key-less feed of X's own trends) each grow one region of a shared
+  side-scrolling world: their words pick a biome and a mood, and the sentiment and actions in the
+  headline become the glow, scale and colour of what's placed there. Everyone who visits today shares
+  the same live world. <a href="https://github.com/jay23606/todayland" target="_blank" rel="noopener">Source</a>.</p>
 </main>
 </body>
 </html>
