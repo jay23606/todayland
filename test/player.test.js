@@ -1,47 +1,94 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createPlayer, step, collectNearby, SPEED, FIND_RADIUS } from '../src/player.js'
-import { W, H } from '../src/world.js'
+import { createPlayer, step, HALF_W, OBJ_HALF_W } from '../src/player.js'
 
-test('a new player starts centred on its start tile', () => {
- const p = createPlayer([3, 4])
- assert.equal(p.x, 3.5); assert.equal(p.y, 4.5)
+const flatWorld = (w = 40, groundY = 10, platforms = []) => ({ w, ground: new Array(w).fill(groundY), platforms, objects: [] })
+const noInput = { left: false, right: false, jump: false }
+const settle = (world, p, input, ticks = 200, dt = 1 / 60) => { for (let i = 0; i < ticks; i++) p = step(p, input, world, dt); return p }
+
+test('a player dropped in mid-air falls and comes to rest exactly on the ground', () => {
+ const world = flatWorld()
+ let p = createPlayer([5, 0])
+ p = settle(world, p, noInput)
+ assert.equal(p.y, 10)
+ assert.equal(p.onGround, true)
+ assert.equal(p.vy, 0)
 })
 
-test('stepping moves at the given speed, and a diagonal input is normalised so it is not faster', () => {
- const p = createPlayer([5, 5])
- const straight = step(p, { x: 1, y: 0 }, 1)
- assert.ok(Math.abs(straight.x - (5.5 + SPEED)) < 1e-9)
- const diag = step(p, { x: 1, y: 1 }, 1)
- const dist = Math.hypot(diag.x - p.x, diag.y - p.y)
- assert.ok(Math.abs(dist - SPEED) < 1e-6, `diagonal distance ${dist} should equal SPEED`)
+test('holding right accelerates up to MAX_SPEED and moves the player right; letting go brings it to a stop', () => {
+ const world = flatWorld()
+ let p = createPlayer([5, 10])
+ p = settle(world, p, { ...noInput, right: true }, 120)
+ assert.ok(p.vx > 0 && p.x > 5)
+ assert.equal(p.facing, 1)
+ p = settle(world, p, noInput, 60)
+ assert.equal(p.vx, 0)
 })
 
-test('no input leaves the player exactly where it was', () => {
- const p = createPlayer([2, 2])
- const after = step(p, { x: 0, y: 0 }, 1)
- assert.equal(after.x, p.x); assert.equal(after.y, p.y)
+test('holding left moves the player left and faces it left', () => {
+ const world = flatWorld()
+ let p = createPlayer([20, 10])
+ p = settle(world, p, { ...noInput, left: true }, 60)
+ assert.ok(p.vx < 0 && p.x < 20)
+ assert.equal(p.facing, -1)
 })
 
-test('the player cannot be pushed off the grid in any direction', () => {
- let p = createPlayer([0, 0])
- for (let i = 0; i < 50; i++) p = step(p, { x: -1, y: -1 }, 1)
- assert.ok(p.x >= 0.5 && p.y >= 0.5)
- let q = createPlayer([W - 1, H - 1])
- for (let i = 0; i < 50; i++) q = step(q, { x: 1, y: 1 }, 1)
- assert.ok(q.x <= W - 0.5 && q.y <= H - 0.5)
+test('a jump from the ground rises then falls back to exactly the same ground level', () => {
+ const world = flatWorld()
+ let p = settle(world, createPlayer([5, 0]), noInput) // land first
+ p = step(p, { ...noInput, jump: true }, world, 1 / 60)
+ assert.ok(p.vy < 0 && p.onGround === false, 'left the ground moving up')
+ p = settle(world, p, noInput, 200)
+ assert.equal(p.y, 10)
+ assert.equal(p.onGround, true)
 })
 
-test('collectNearby marks only objects within the find radius, once each, and returns just the new ones', () => {
- const player = createPlayer([5, 5])
- const objects = [
-  { id: 0, x: 5, y: 5, found: false },
-  { id: 1, x: 5 + FIND_RADIUS + 0.3, y: 5, found: false },
-  { id: 2, x: 5, y: 5, found: true }
- ]
- const found = collectNearby(player, objects)
- assert.deepEqual(found.map(o => o.id), [0])
- assert.equal(objects[0].found, true)
- assert.equal(objects[1].found, false)
- assert.deepEqual(collectNearby(player, objects), [], 'nothing new the second time')
+test('jumping only works while on the ground: holding jump in mid-air does not launch again', () => {
+ const world = flatWorld()
+ let p = settle(world, createPlayer([5, 0]), noInput) // land first
+ p = step(p, { ...noInput, jump: true }, world, 1 / 60) // leaves the ground
+ const vyAfterFirstJump = p.vy
+ p = step(p, { ...noInput, jump: true }, world, 1 / 60) // still held, still airborne
+ assert.ok(p.vy > vyAfterFirstJump, 'gravity applied, no second jump boost')
+})
+
+test('a platform catches the player falling onto it from above, instead of passing through to the ground', () => {
+ const world = flatWorld(40, 14, [{ x: 3, y: 8, w: 4 }])
+ let p = createPlayer([5, 0])
+ p = settle(world, p, noInput)
+ assert.equal(p.y, 8, 'landed on the platform, not the ground at 14')
+ assert.equal(p.onGround, true)
+})
+
+test('a platform does not catch a player already below it walking under it', () => {
+ const world = flatWorld(40, 14, [{ x: 3, y: 8, w: 4 }])
+ let p = createPlayer([5, 13])
+ p = settle(world, p, noInput, 60)
+ assert.equal(p.y, 14, 'fell through to the ground, the platform is one-way')
+})
+
+test('a solid object blocks horizontal movement into it', () => {
+ const world = flatWorld()
+ world.objects = [{ x: 10, y: 10, scale: 1, destroyed: false }]
+ let p = createPlayer([5, 10])
+ p = settle(world, p, { ...noInput, right: true }, 300)
+ assert.ok(p.x < 10 - OBJ_HALF_W + 0.05, 'stopped before reaching the object')
+})
+
+test('a destroyed object is no longer solid', () => {
+ const world = flatWorld()
+ world.objects = [{ x: 10, y: 10, scale: 1, destroyed: true }]
+ let p = createPlayer([5, 10])
+ p = settle(world, p, { ...noInput, right: true }, 300)
+ assert.ok(p.x > 10, 'walked straight through it')
+})
+
+test('the player never leaves the world through either edge', () => {
+ const world = flatWorld(20)
+ let p = createPlayer([1, 10])
+ p = settle(world, p, { ...noInput, left: true }, 300)
+ assert.ok(p.x >= HALF_W - 1e-9)
+ p = createPlayer([18, 10])
+ p = settle(world, p, { ...noInput, right: true }, 300)
+ assert.ok(p.x <= 20 - HALF_W + 1e-9)
 })
