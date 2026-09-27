@@ -1,120 +1,187 @@
-import { TILE, W, H } from './world.js'
+import { TILE, H, groundAt, regionAt } from './world.js'
+import { GRID } from './sprites.js'
+import { spriteCanvas } from './sprite-cache.js'
+import { OBJ_HEIGHT } from './player.js'
 
-// Draws the world to a canvas and runs a light weather-particle system. Pure-ish: it reads the world
-// and a player position and paints; it holds only its own particle state, nothing the game logic needs.
+// Draws one frame: the sky, the ground and platforms, placed objects and the relation links between
+// them, in-flight lasers and their impact sparks, the local player, and any peers -- all in one small
+// window (the "camera") that scrolls to follow the player through the much wider world. Nothing here
+// is pure/tested (it is a canvas, by nature); the world, player and weapon state it reads all are.
 
-const shade = (hex, amt) => {
- const n = parseInt(hex.slice(1), 16)
- const r = Math.max(0, Math.min(255, (n >> 16) + amt))
- const g = Math.max(0, Math.min(255, ((n >> 8) & 0xff) + amt))
- const b = Math.max(0, Math.min(255, (n & 0xff) + amt))
- return `rgb(${r},${g},${b})`
-}
+export const VIEW_W = 20 // tiles visible at once
+export const VIEW_H = H
+
+const hash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) | 0; return h >>> 0 }
 
 export function createRenderer(canvas) {
+ canvas.width = VIEW_W * TILE
+ canvas.height = VIEW_H * TILE
  const ctx = canvas.getContext('2d')
- canvas.width = W * TILE
- canvas.height = H * TILE
- let particles = []
- let seeded = false
+ ctx.imageSmoothingEnabled = false
 
- function seedParticles(weather) {
-  particles = []
-  if (weather === 'clear') return
-  const count = weather === 'storm' ? 90 : weather === 'sparkle' ? 60 : 45
-  for (let i = 0; i < count; i++) {
-   particles.push({
-    x: Math.random() * canvas.width, y: Math.random() * canvas.height,
-    vy: weather === 'storm' ? 260 + Math.random() * 160 : weather === 'mist' ? 8 + Math.random() * 10 : -12 - Math.random() * 18,
-    vx: weather === 'storm' ? -40 - Math.random() * 30 : (Math.random() - 0.5) * 12,
-    size: weather === 'sparkle' ? 1.5 + Math.random() * 2 : weather === 'mist' ? 30 + Math.random() * 50 : 1 + Math.random() * 1.5,
-    phase: Math.random() * Math.PI * 2
-   })
+ function cameraX(world, player) {
+  if (world.w <= VIEW_W) return 0
+  return Math.max(0, Math.min(world.w - VIEW_W, player.x - VIEW_W / 2))
+ }
+
+ function drawSky(world, camX, now) {
+  const region = regionAt(world, camX + VIEW_W / 2)
+  const [top, bottom] = region.palette.sky
+  const g = ctx.createLinearGradient(0, 0, 0, canvas.height)
+  g.addColorStop(0, top); g.addColorStop(1, bottom)
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  if (region.weather === 'sparkle') {
+   for (let i = 0; i < 18; i++) {
+    const sx = (i * 137 + now * 0.01) % canvas.width, sy = (i * 71) % (canvas.height * 0.6)
+    ctx.globalAlpha = 0.3 + 0.3 * Math.sin(now / 300 + i)
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(sx, sy, 2, 2)
+   }
+   ctx.globalAlpha = 1
+  } else if (region.weather === 'storm') {
+   ctx.fillStyle = `rgba(20,20,30,${0.15 + 0.1 * Math.sin(now / 220)})`
+   ctx.fillRect(0, 0, canvas.width, canvas.height)
+  } else if (region.weather === 'mist') {
+   ctx.fillStyle = 'rgba(255,255,255,0.06)'
+   for (let i = 0; i < 4; i++) ctx.fillRect(0, canvas.height * (0.3 + i * 0.15) + Math.sin(now / 900 + i) * 8, canvas.width, 30)
   }
  }
 
- function drawTerrain(world) {
-  const { palette } = world
-  const colors = [palette.low, palette.base, palette.high]
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-   ctx.fillStyle = colors[world.terrain[y][x]]
-   ctx.fillRect(x * TILE, y * TILE, TILE, TILE)
+ function drawGround(world, camX) {
+  const x0 = Math.floor(camX), x1 = Math.ceil(camX + VIEW_W) + 1
+  for (let x = x0; x < x1; x++) {
+   const gy = groundAt(world, x), region = regionAt(world, x)
+   const sx = (x - camX) * TILE
+   const h = canvas.height - gy * TILE
+   ctx.fillStyle = region.palette.base
+   ctx.fillRect(sx, gy * TILE, TILE + 1, h)
+   ctx.fillStyle = region.palette.high
+   ctx.fillRect(sx, gy * TILE, TILE + 1, Math.max(2, TILE * 0.12))
+   if (x % 3 === 0) { ctx.fillStyle = region.palette.low; ctx.fillRect(sx, gy * TILE + TILE * 0.5, TILE + 1, TILE * 0.5) }
   }
-  // a soft grid so tiles read as a place, not a flat wash
-  ctx.strokeStyle = shade(palette.base, -14)
-  ctx.lineWidth = 1
-  for (let x = 0; x <= W; x++) { ctx.beginPath(); ctx.moveTo(x * TILE, 0); ctx.lineTo(x * TILE, canvas.height); ctx.globalAlpha = 0.12; ctx.stroke() }
-  for (let y = 0; y <= H; y++) { ctx.beginPath(); ctx.moveTo(0, y * TILE); ctx.lineTo(canvas.width, y * TILE); ctx.globalAlpha = 0.12; ctx.stroke() }
-  ctx.globalAlpha = 1
  }
 
- function drawObjects(world, t) {
-  for (const o of world.objects) {
-   if (o.found) continue
-   const cx = o.x * TILE + TILE / 2, cy = o.y * TILE + TILE / 2
-   const bob = Math.sin(t / 400 + o.id) * 3
+ function drawPlatforms(world, camX) {
+  for (const p of world.platforms) {
+   if (p.x + p.w < camX - 1 || p.x > camX + VIEW_W + 1) continue
+   const region = regionAt(world, p.x)
+   const sx = (p.x - camX) * TILE, sy = p.y * TILE
+   ctx.fillStyle = region.palette.base
+   ctx.fillRect(sx, sy, p.w * TILE, TILE * 0.5)
+   ctx.fillStyle = region.palette.accent
+   ctx.fillRect(sx, sy, p.w * TILE, TILE * 0.14)
+  }
+ }
+
+ function drawRelations(world, camX, now) {
+  const byId = new Map(world.objects.map(o => [o.id, o]))
+  for (const r of world.relations) {
+   const a = byId.get(r.a), b = byId.get(r.b)
+   if (!a || !b || a.destroyed || b.destroyed) continue
+   const ax = (a.x - camX) * TILE, ay = (a.y - OBJ_HEIGHT * a.scale * 0.5) * TILE
+   const bx = (b.x - camX) * TILE, by = (b.y - OBJ_HEIGHT * b.scale * 0.5) * TILE
    ctx.save()
-   ctx.translate(cx, cy + bob)
-   if (o.spin) ctx.rotate(Math.sin(t / 600 + o.id) * 0.25)
-   ctx.scale(o.scale, o.scale)
-   ctx.font = `${TILE * 0.85}px "Segoe UI Emoji","Noto Color Emoji",sans-serif`
-   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-   ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = 6
-   ctx.fillText(o.glyph, 0, 0)
+   ctx.strokeStyle = r.glow
+   ctx.lineWidth = 3
+   ctx.globalAlpha = 0.55 + 0.2 * Math.sin(now / 250)
+   ctx.setLineDash([6, 6])
+   ctx.lineDashOffset = -now / 40
+   ctx.shadowColor = r.glow; ctx.shadowBlur = 8
+   ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke()
    ctx.restore()
   }
  }
 
- function drawPlayer(pos, t) {
-  const cx = pos.x * TILE + TILE / 2, cy = pos.y * TILE + TILE / 2
-  const bob = Math.sin(t / 220) * 2
+ function drawObject(o, camX, now) {
+  if (o.destroyed) return
+  const accent = o.glowColor || '#f2f2f2'
+  const img = spriteCanvas(o.type, o.spriteSeed, accent)
+  const w = TILE * 1.15 * o.scale, h = w
+  let sx = (o.x - camX) * TILE - w / 2
+  const sy = o.y * TILE - h
+  if (o.jitter) sx += Math.sin(now / 40 + hash(o.id)) * 2
   ctx.save()
-  ctx.translate(cx, cy + bob)
-  ctx.font = `${TILE * 0.9}px "Segoe UI Emoji","Noto Color Emoji",sans-serif`
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 8
-  ctx.fillText('🧭', 0, 0)
+  if (o.glowColor) { ctx.shadowColor = o.glowColor; ctx.shadowBlur = 14 }
+  ctx.drawImage(img, 0, 0, GRID, GRID, sx, sy, w, h)
   ctx.restore()
- }
-
- function stepParticles(dt, weather) {
-  for (const p of particles) {
-   p.x += p.vx * dt; p.y += p.vy * dt
-   if (weather === 'mist') p.phase += dt * 0.4
-   if (p.y < -60 || p.y > canvas.height + 60 || p.x < -80 || p.x > canvas.width + 80) {
-    p.x = Math.random() * canvas.width
-    p.y = weather === 'sparkle' ? canvas.height + 10 : -10
-   }
+  if (o.label) {
+   ctx.font = '10px monospace'
+   ctx.fillStyle = '#ffffffcc'
+   ctx.textAlign = 'center'
+   ctx.fillText(o.label, sx + w / 2, sy - 4)
   }
  }
 
- function drawParticles(weather) {
-  if (weather === 'clear') return
-  ctx.save()
-  if (weather === 'storm') { ctx.strokeStyle = 'rgba(200,220,255,.55)'; ctx.lineWidth = 1.4 }
-  for (const p of particles) {
-   if (weather === 'storm') {
-    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - 8, p.y + 14); ctx.stroke()
-   } else if (weather === 'sparkle') {
-    ctx.fillStyle = `rgba(255,240,180,${0.5 + 0.5 * Math.sin(p.phase + p.y / 20)})`
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, 7); ctx.fill()
-   } else {
-    ctx.fillStyle = 'rgba(255,255,255,0.05)'
-    ctx.beginPath(); ctx.arc(p.x + Math.sin(p.phase) * 20, p.y, p.size, 0, 7); ctx.fill()
-   }
+ function drawObjects(world, camX, now) {
+  for (const o of world.objects) {
+   if (o.x < camX - 2 || o.x > camX + VIEW_W + 2) continue
+   drawObject(o, camX, now)
   }
-  ctx.restore()
  }
 
- return {
-  draw(world, playerPos, t, dt) {
-   if (!seeded) { seedParticles(world.weather); seeded = true }
-   drawTerrain(world)
-   drawObjects(world, t)
-   drawPlayer(playerPos, t)
-   stepParticles(dt, world.weather)
-   drawParticles(world.weather)
-  },
-  resetWeather(weather) { seedParticles(weather) }
+ function drawLasers(lasers, camX, colorOf) {
+  for (const l of lasers) {
+   if (l.dead) continue
+   const sx = (l.x - camX) * TILE, sy = l.y * TILE
+   const bx = sx - Math.cos(l.angle) * TILE * 1.1, by = sy - Math.sin(l.angle) * TILE * 1.1
+   const color = colorOf ? colorOf(l.by) : '#66e0ff'
+   ctx.save()
+   ctx.lineCap = 'round'
+   ctx.strokeStyle = color; ctx.globalAlpha = 0.35; ctx.lineWidth = 10
+   ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(sx, sy); ctx.stroke()
+   ctx.globalAlpha = 0.85; ctx.lineWidth = 5
+   ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(sx, sy); ctx.stroke()
+   ctx.globalAlpha = 1; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2
+   ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(sx, sy); ctx.stroke()
+   ctx.restore()
+  }
  }
+
+ function drawParticles(particles, camX) {
+  for (const p of particles) {
+   const t = p.age / p.life
+   if (t >= 1) continue
+   const sx = (p.x - camX) * TILE, sy = p.y * TILE
+   ctx.save()
+   ctx.globalAlpha = 1 - t
+   ctx.strokeStyle = p.color || '#ffd75d'
+   ctx.lineWidth = 2
+   ctx.beginPath(); ctx.arc(sx, sy, 4 + t * 16, 0, Math.PI * 2); ctx.stroke()
+   ctx.restore()
+  }
+ }
+
+ function drawPerson(x, y, facing, color, name, camX, now, running) {
+  const sx = (x - camX) * TILE, sy = y * TILE
+  const w = TILE * 1.05, h = w
+  const bob = running ? Math.sin(now / 90) * 2 : 0
+  ctx.save()
+  ctx.translate(sx, sy + bob)
+  if (facing < 0) ctx.scale(-1, 1)
+  const img = spriteCanvas('people', color, color)
+  ctx.drawImage(img, 0, 0, GRID, GRID, -w / 2, -h, w, h)
+  ctx.restore()
+  if (name) {
+   ctx.font = 'bold 10px monospace'
+   ctx.fillStyle = '#ffffffdd'
+   ctx.textAlign = 'center'
+   ctx.fillText(name, sx, sy - h - 3)
+  }
+ }
+
+ function draw({ world, player, peers = [], lasers = [], particles = [], me }, now) {
+  const camX = cameraX(world, player)
+  drawSky(world, camX, now)
+  drawGround(world, camX)
+  drawPlatforms(world, camX)
+  drawRelations(world, camX, now)
+  drawObjects(world, camX, now)
+  for (const p of peers) drawPerson(p.x, p.y, p.facing || 1, p.color || '#8ed0ad', p.name, camX, now, Math.abs(p.vx || 0) > 0.3)
+  drawPerson(player.x, player.y, player.facing, me?.color || '#66e0ff', null, camX, now, Math.abs(player.vx) > 0.3)
+  drawLasers(lasers, camX, by => (peers.find(p => p.id === by)?.color) || me?.color || '#66e0ff')
+  drawParticles(particles, camX)
+ }
+
+ return { draw, cameraX, VIEW_W, VIEW_H }
 }
