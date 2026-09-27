@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Todayland</title>
+<meta name="description" content="A new little world every day, grown from today's real news.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧭</text></svg>">
+  <script type="module" crossorigin src="/todayland/assets/index-U4kcDFRb.js"></script>
+  <link rel="stylesheet" crossorigin href="/todayland/assets/index-DymiZjP-.css">
+</head>
+<body>
+<header>
+ <h1>🧭 Todayland</h1>
+ <p id="headline" class="headline">Loading today's headline…</p>
+</header>
+<main>
+ <div id="stage" class="stage">
+  <canvas id="world"></canvas>
+  <div id="hud" class="hud">
+   <span id="progress">0 / 0 found</span>
+   <span id="community" class="community" hidden></span>
+  </div>
+  <div id="toast" class="toast" hidden></div>
+  <div id="complete" class="complete" hidden>
+   <h2>You found everything in today's world.</h2>
+   <p>Come back tomorrow for a new headline, a new place.</p>
+   <button id="share">Copy a link to today's world</button>
+  </div>
+ </div>
+ <p class="controls">Move with <b>WASD</b>, arrow keys, or drag/touch. Walk up to something to find it.</p>
+ <p class="about">Every day, one real headline (from Wikipedia's news feed) is turned into a small world: its
+  words pick a biome, a mood and a handful of things hidden in it, all deterministic from the headline and the
+  date — so today's world is the same for everyone, and no image model is ever called. <a href="https://github.com/jay23606/todayland" target="_blank" rel="noopener">Source</a>.</p>
+</main>
+</body>
+</html>
