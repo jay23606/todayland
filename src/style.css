@@ -7,7 +7,12 @@ h1 { font-size: clamp(1.8rem, 5vw, 2.6rem); margin: 6px 0 4px; letter-spacing: -
 main { width: 100%; max-width: 760px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .stage { position: relative; width: 100%; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 20px 60px #0007; touch-action: none; }
 #world { display: block; width: 100%; height: auto; cursor: crosshair; image-rendering: pixelated; image-rendering: crisp-edges; }
-.hud { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 700; color: #eaf5ee; text-shadow: 0 1px 4px #000c; pointer-events: none; }
+.hud { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 0.8rem; font-weight: 700; color: #eaf5ee; text-shadow: 0 1px 4px #000c; pointer-events: none; }
+.health { display: flex; align-items: center; gap: 6px; }
+.health-bar { width: 72px; height: 9px; border-radius: 5px; background: #00000066; border: 1px solid #ffffff33; overflow: hidden; }
+#health-fill { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #52d98a, #8ff0ac); transition: width 0.2s ease; }
+#health-fill.low { background: linear-gradient(90deg, #ff5d5d, #ff8e5d); animation: pulseLow 0.6s ease infinite; }
+@keyframes pulseLow { 50% { opacity: 0.55; } }
 #community { position: absolute; top: 34px; left: 10px; color: #ffe17c; font-size: 0.75rem; font-weight: 700; text-shadow: 0 1px 4px #000c; }
 .toast { position: absolute; left: 50%; top: 10px; translate: -50% 0; background: #0d1f16ee; border: 1px solid #2f5544; padding: 8px 16px; border-radius: 999px; font-weight: 700; font-size: 0.8rem; animation: pop 2.2s ease forwards; text-align: center; max-width: 90%; pointer-events: none; }
 @keyframes pop { 0% { opacity: 0; translate: -50% -8px; } 10% { opacity: 1; translate: -50% 0; } 82% { opacity: 1; } 100% { opacity: 0; translate: -50% -8px; } }

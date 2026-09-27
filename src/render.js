@@ -101,6 +101,14 @@ export function createRenderer(canvas) {
   let sx = (o.x - camX) * TILE - w / 2
   const sy = o.y * TILE - h
   if (o.jitter) sx += Math.sin(now / 40 + hash(o.id)) * 2
+  if (o.hostile) {
+   ctx.save()
+   ctx.strokeStyle = '#ff3b3b'
+   ctx.globalAlpha = 0.5 + 0.4 * Math.sin(now / 160 + hash(o.id))
+   ctx.lineWidth = 2
+   ctx.beginPath(); ctx.arc(sx + w / 2, sy + h / 2, w * 0.62, 0, Math.PI * 2); ctx.stroke()
+   ctx.restore()
+  }
   ctx.save()
   if (o.glowColor) { ctx.shadowColor = o.glowColor; ctx.shadowBlur = 14 }
   ctx.drawImage(img, 0, 0, GRID, GRID, sx, sy, w, h)
@@ -152,7 +160,8 @@ export function createRenderer(canvas) {
   }
  }
 
- function drawPerson(x, y, facing, color, name, camX, now, running) {
+ function drawPerson(x, y, facing, color, name, camX, now, running, blinking) {
+  if (blinking && Math.floor(now / 80) % 2 === 1) return // a hit flickers the sprite rather than hiding it steadily
   const sx = (x - camX) * TILE, sy = y * TILE
   const w = TILE * 1.05, h = w
   const bob = running ? Math.sin(now / 90) * 2 : 0
@@ -170,17 +179,28 @@ export function createRenderer(canvas) {
   }
  }
 
- function draw({ world, player, peers = [], lasers = [], particles = [], me }, now) {
+ function drawDamageFlash(flash) {
+  if (!flash) return
+  ctx.save()
+  ctx.globalAlpha = Math.min(0.45, flash)
+  ctx.fillStyle = '#ff2d2d'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.restore()
+ }
+
+ function draw({ world, player, peers = [], lasers = [], enemyLasers = [], particles = [], me, invulnerable = false, damageFlash = 0 }, now) {
   const camX = cameraX(world, player)
   drawSky(world, camX, now)
   drawGround(world, camX)
   drawPlatforms(world, camX)
   drawRelations(world, camX, now)
   drawObjects(world, camX, now)
-  for (const p of peers) drawPerson(p.x, p.y, p.facing || 1, p.color || '#8ed0ad', p.name, camX, now, Math.abs(p.vx || 0) > 0.3)
-  drawPerson(player.x, player.y, player.facing, me?.color || '#66e0ff', null, camX, now, Math.abs(player.vx) > 0.3)
+  for (const p of peers) drawPerson(p.x, p.y, p.facing || 1, p.color || '#8ed0ad', p.name, camX, now, Math.abs(p.vx || 0) > 0.3, false)
+  drawPerson(player.x, player.y, player.facing, me?.color || '#66e0ff', null, camX, now, Math.abs(player.vx) > 0.3, invulnerable)
   drawLasers(lasers, camX, by => (peers.find(p => p.id === by)?.color) || me?.color || '#66e0ff')
+  drawLasers(enemyLasers, camX, () => '#ff3b3b')
   drawParticles(particles, camX)
+  drawDamageFlash(damageFlash)
  }
 
  return { draw, cameraX, VIEW_W, VIEW_H }

@@ -26,6 +26,25 @@ test('the same type and seed always draws the identical grid; a different seed u
  assert.ok(differences > 0, 'at least some seeds should draw a visibly different sprite')
 })
 
+test('sprites are genuinely varied, not a small handful of shapes recolored: most of a big sample of seeds are unique', () => {
+ for (const type of SPRITE_TYPES) {
+  const seen = new Set()
+  for (let i = 0; i < 80; i++) seen.add(JSON.stringify(spriteGrid(type, 'variety-' + i)))
+  assert.ok(seen.size >= 50, `${type}: only ${seen.size}/80 distinct sprites`)
+ }
+})
+
+test('sprite sizes vary: the drawn silhouette is not the same footprint every time', () => {
+ for (const type of SPRITE_TYPES) {
+  const footprints = new Set()
+  for (let i = 0; i < 30; i++) {
+   const g = spriteGrid(type, 'size-' + i)
+   footprints.add(g.flat().filter(v => v !== 0).length)
+  }
+  assert.ok(footprints.size >= 5, `${type}: sprite silhouettes barely vary in size`)
+ }
+})
+
 test('cell values are only the five known codes', () => {
  const known = new Set([0, 1, 2, 3, 4])
  for (const type of SPRITE_TYPES) for (const row of spriteGrid(type, 'check')) for (const v of row) assert.ok(known.has(v))

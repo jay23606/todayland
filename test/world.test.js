@@ -86,6 +86,25 @@ test('a clash headline scales its paired objects up and gives them a red glow; a
  }
 })
 
+test('an alarming headline makes most (but not all) of its region hostile; a calm one does not', () => {
+ const alarming = buildWorld([{ ...concepts[0], mood: 'alarming', intensity: 5 }], 'alarming-check')
+ const hostileCount = alarming.objects.filter(o => o.hostile).length
+ assert.ok(hostileCount > 0 && hostileCount < alarming.objects.length, `expected some but not all hostile, got ${hostileCount}/${alarming.objects.length}`)
+ const calm = buildWorld([{ ...concepts[0], mood: 'calm', relation: 'link' }], 'calm-check')
+ assert.ok(calm.objects.every(o => !o.hostile))
+})
+
+test('a clash relation makes exactly its own pair hostile, whatever the mood', () => {
+ const world = buildWorld([{ ...concepts[0], mood: 'calm', creatures: ['people', 'machine'], relation: 'clash' }], 'clash-hostile-check')
+ const rel = world.relations[0]
+ if (rel) {
+  const a = world.objects.find(o => o.id === rel.a), b = world.objects.find(o => o.id === rel.b)
+  assert.equal(a.hostile, true); assert.equal(b.hostile, true)
+  const others = world.objects.filter(o => o.id !== rel.a && o.id !== rel.b)
+  assert.ok(others.every(o => !o.hostile))
+ }
+})
+
 test('progress helpers count correctly and clearing needs every object destroyed', () => {
  const world = buildWorld(concepts, 'progress-check')
  assert.equal(destroyedCount(world), 0)

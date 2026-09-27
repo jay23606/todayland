@@ -100,8 +100,8 @@ function placeObjects(rand, concepts, ground, platforms, x0, width, regionIndex,
   const type = pick(rand, concepts.creatures)
   out.push({
    id: `${regionIndex}-${i}`, regionIndex, x: x0 + gx, y: gy, type,
-   spriteSeed: `${regionIndex}-${i}-${type}`, scale: range(rand, 0.85, 1.2), glow: null, glowColor: null,
-   jitter: false, destroyed: false, label: concepts.subjects[i % Math.max(1, concepts.subjects.length)] || null
+   spriteSeed: `${regionIndex}-${i}-${type}`, scale: range(rand, 0.65, 1.7), glow: null, glowColor: null,
+   jitter: false, destroyed: false, hostile: false, label: concepts.subjects[i % Math.max(1, concepts.subjects.length)] || null
   })
  }
  return out
@@ -121,6 +121,7 @@ function buildRelations(rand, objects, relationKind, width, x0) {
   a.scale *= style.scaleMul; b.scale *= style.scaleMul
   a.glowColor = b.glowColor = style.glow
   a.jitter = b.jitter = style.jitter
+  if (relationKind === 'clash') a.hostile = b.hostile = true
   if (style.spread > 1) { const dir = a.x <= b.x ? -1 : 1; a.x = clamp(a.x + dir * 2, x0, x0 + width - 1) }
   relations.push({ a: a.id, b: b.id, kind: relationKind, glow: style.glow })
  }
@@ -133,6 +134,10 @@ function buildRegion(concepts, seed, index, x0, prevGroundEnd) {
  const ground = buildGround(rand, profile, REGION_W, prevGroundEnd ?? profile.baseline)
  const platforms = buildPlatforms(rand, profile, REGION_W, ground, x0)
  const objects = placeObjects(rand, concepts, ground, platforms, x0, REGION_W, index, index === 0 ? 2 : 0)
+ // An "alarming" headline's region is dangerous throughout: most (not all, so there is still a way
+ // through) of its objects fight back. A calmer region is only as dangerous as a 'clash' relation makes
+ // specific pairs of it, below.
+ if (concepts.mood === 'alarming') for (const o of objects) if (rand() < 0.65) o.hostile = true
  const relations = objects.length >= 2 ? buildRelations(rand, objects, concepts.relation, REGION_W, x0) : []
  return {
   index, x0, width: REGION_W, headline: concepts.headline, concepts,

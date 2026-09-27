@@ -4,14 +4,21 @@
 
 A shared side-scrolling world, regrown every day from several real current news headlines. No account,
 no image model, no per-day cost: each headline's own words pick a biome and a mood for one region of a
-long strip world, its sentiment and actions become the glow/scale/colour of what's placed there, and
-everyone who loads the game today runs and jumps through the same live world together, firing a cartoon
-laser at whatever they find. Everything is worked out deterministically from the day and the headlines,
-so a link to today's world is a link anyone can open and see the same terrain in.
+long strip world, its sentiment and actions become the glow/scale/colour of what's placed there -- and
+whether it fights back -- and everyone who loads the game today runs and jumps through the same live
+world together, firing a cartoon laser at whatever they find before it gets to them first. Everything is
+worked out deterministically from the day and the headlines, so a link to today's world is a link anyone
+can open and see the same terrain in.
 
 **Controls:** A/D or the arrow keys (or the on-screen buttons) to run, W/↑/space to jump, click or tap
 anywhere to fire. Regions are laid out left to right, biome by biome, headline by headline; walking into
 a new one shows its headline as a banner.
+
+**It fights back.** An "alarming" headline's region is dangerous throughout; red-ringed, pulsing objects
+there (and any pair linked by a "clash" relation, whatever the region's mood) shoot at you from range and
+hurt you on contact. Health is shown top-left; running out sends you back to the start of the region you
+were in, full health restored, with a moment of invulnerability so it isn't an instant repeat. Shoot the
+dangerous ones before they shoot you.
 
 ## Why this instead of an actual image model
 
@@ -43,13 +50,21 @@ with nothing but word lists and counting: pure, deterministic, fully covered by 
 takes a whole day's worth of these concepts and a seed (the day plus the headlines) and lays out one
 region per headline, left to right: a smoothed ground line that joins seamlessly at each region's seam,
 floating platforms, placed objects, and relations between object pairs whose headline sentiment becomes
-their scale, glow colour, and (for "flee") how far apart they're placed. `src/sprites.js` draws every
-creature and object as a small procedural pixel-art bitmap -- geometric primitives on a 16x16 grid, no
-art files and no image model, seeded so the same object always looks the same. `src/player.js` is
-side-scrolling physics: gravity, running, jumping, and collision with the ground, one-way platforms, and
-solid objects. `src/weapons.js` is the laser: fire toward a point, travel, destroy the first object it
-touches. `src/render.js` draws all of it to a scrolling camera; `src/multiplayer.js` is the shared part
-(see below); `src/main.js` is the wiring: input, the game loop, and the HUD.
+their scale, glow colour, and (for "flee") how far apart they're placed; an "alarming" region also marks
+most of its objects hostile, and a "clash" relation marks exactly its own pair, whatever the mood.
+`src/sprites.js` draws every creature and object from a pool of interchangeable parts -- a head shape, a
+body shape, a limb count, an accessory -- assembled on a 16x16 grid and picked by the object's own seed,
+so the space of possible sprites is large rather than four fixed silhouettes with a coat of paint; no art
+files, no image model. `src/sprite-cache.js` turns a grid into an actual `<canvas>` and gives it its
+colour, also derived from the seed within a type-appropriate hue band (people stay skin-tone-ish,
+machines stay steely, ...) rather than one fixed palette per type, so two of the same type are never just
+palette swaps of each other. `src/player.js` is side-scrolling physics: gravity, running, jumping, and
+collision with the ground, one-way platforms, and solid objects. `src/weapons.js` is the player's laser:
+fire toward a point, travel, destroy the first object it touches. `src/combat.js` is what a hostile
+object does back -- fires its own beam at the player when they're in range, and deals contact damage if
+they're standing on it, both on their own cooldowns. `src/render.js` draws all of it to a scrolling
+camera; `src/multiplayer.js` is the shared part (see below); `src/main.js` is the wiring: input, the game
+loop, health and respawn, and the HUD.
 
 ## Shared multiplayer (optional, best-effort)
 
@@ -99,12 +114,13 @@ lint, tests and a build on every pull request.
 | `src/parse.js` | one headline → concepts (biome, mood, creatures, relation, subjects, intensity) |
 | `src/daily.js` | today's headlines (every story in Wikipedia's feed, with a dated fallback) |
 | `src/world.js` | concepts list + seed → a multi-region strip world; `todaysWorld` composes daily+parse+world |
-| `src/sprites.js` | procedural pixel-art sprite grids, no art files or image model |
-| `src/sprite-cache.js` | turns a sprite grid into an actual `<canvas>`, cached |
+| `src/sprites.js` | procedural, part-based pixel-art sprite grids -- no two seeds need look alike |
+| `src/sprite-cache.js` | turns a sprite grid into an actual `<canvas>`, coloured per seed, cached |
 | `src/player.js` | side-scrolling physics: gravity, run, jump, ground/platform/object collision |
-| `src/weapons.js` | the laser: fire, travel, destroy the first object it touches |
+| `src/weapons.js` | the player's laser: fire, travel, destroy the first object it touches |
+| `src/combat.js` | hostile objects fighting back: ranged fire in range, contact damage on touch |
 | `src/multiplayer.js` | Supabase Realtime presence + broadcast: peers, shared shots, shared hits |
-| `src/render.js` | canvas drawing: camera, sky/weather, ground, objects, relations, lasers, particles |
+| `src/render.js` | canvas drawing: camera, sky/weather, ground, objects, relations, lasers, particles, health flash |
 | `src/supabase.js` | best-effort shared headline freeze + a community counter |
-| `src/main.js` | wiring: input, the game loop, the HUD |
+| `src/main.js` | wiring: input, the game loop, health/respawn, the HUD |
 | `schema.sql` | the two small `td_`-prefixed tables and functions, idempotent -- **not yet applied** |

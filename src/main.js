@@ -2,6 +2,7 @@ import { todaysWorld, TILE, totalTargets, destroyedCount, isCleared, regionAt } 
 import { createPlayer, step, HEIGHT } from './player.js'
 import { createRenderer } from './render.js'
 import { fireLaser, stepLasers, liveLasers, checkLaserHits, FIRE_COOLDOWN } from './weapons.js'
+import { hostileFire, checkPlayerHits, checkContactDamage, MAX_HEALTH, HIT_INVULN, RESPAWN_INVULN } from './combat.js'
 import { connect, updatePresence, broadcastLaser, broadcastHit, laserPayload, hitPayload, randomName, colorFor } from './multiplayer.js'
 import { freezeDay, recordVisit, recordFind, readVisits } from './supabase.js'
 
@@ -23,17 +24,27 @@ async function boot() {
  let player = createPlayer(world.start)
  let lastRegion = -1
  let lasers = []
+ let enemyLasers = []
  let particles = []
  let peers = []
  let lastShot = -Infinity
  let lastPresence = 0
+ let health = MAX_HEALTH
+ let invulnUntil = 0
+ let damageFlash = 0
 
  const me = { id: myId(), name: randomName() }
  me.color = colorFor(me.id)
 
  const paintProgress = () => { $('#progress').textContent = `${destroyedCount(world)} / ${totalTargets(world)} cleared` }
  const paintPlayers = () => { $('#players').textContent = `${peers.length + 1} exploring now` }
- paintProgress(); paintPlayers()
+ const paintHealth = () => {
+  const pct = Math.max(0, Math.round((health / MAX_HEALTH) * 100))
+  $('#health-fill').style.width = `${pct}%`
+  $('#health-fill').classList.toggle('low', pct <= 30)
+  $('#health-label').textContent = `${Math.max(0, Math.round(health))} / ${MAX_HEALTH}`
+ }
+ paintProgress(); paintPlayers(); paintHealth()
 
  readVisits(world.day).then(row => {
   if (!row || !row.finds) return
@@ -84,6 +95,29 @@ async function boot() {
 
  const spawnParticle = (x, y, color) => particles.push({ x, y, age: 0, life: 0.35, color })
 
+ // Knocked out by hostile things: full health back, sent to the start of the region it happened in
+ // (not all the way back to region 0 -- losing a fight should cost you the region, not the whole run),
+ // and a moment of invulnerability so respawning doesn't just immediately kill you again.
+ const respawn = (now) => {
+  const region = world.regions[regionAt(world, player.x).index]
+  player = createPlayer([region.x0 + 2, region.ground[2] - 1])
+  health = MAX_HEALTH
+  invulnUntil = now + RESPAWN_INVULN * 1000
+  paintHealth()
+  toast('Overwhelmed! Back to the start of the region.')
+ }
+
+ const applyDamage = (hits, now) => {
+  if (!hits.length || now < invulnUntil) return
+  const total = hits.reduce((n, h) => n + h.damage, 0)
+  health -= total
+  invulnUntil = now + HIT_INVULN * 1000
+  damageFlash = 1
+  spawnParticle(player.x, player.y - HEIGHT / 2, '#ff5d5d')
+  paintHealth()
+  if (health <= 0) respawn(now)
+ }
+
  const applyHit = (objectId) => {
   const obj = world.objects.find(o => o.id === objectId)
   if (!obj || obj.destroyed) return
@@ -129,7 +163,7 @@ async function boot() {
   const dt = Math.min(0.05, (now - last) / 1000)
   last = now
   tick(dt, now)
-  renderer.draw({ world, player, peers, lasers, particles, me }, now)
+  renderer.draw({ world, player, peers, lasers, enemyLasers, particles, me, invulnerable: now < invulnUntil, damageFlash }, now)
   requestAnimationFrame(frame)
  }
 
@@ -144,6 +178,16 @@ async function boot() {
    if (hit.by === me.id) { paintProgress(); recordFind(world.day, 1); broadcastHit(hitPayload(hit.objectId, me.id)); if (isCleared(world)) $('#complete').hidden = false }
   }
   lasers = lasers.filter(l => !l.dead)
+
+  // things fighting back: hostile objects take their shot when the player is in range, and anything
+  // hostile the player is still standing on deals contact damage -- both suppressed while invulnerable,
+  // which also covers the moment right after a respawn.
+  for (const shot of hostileFire(world.objects, player, now)) enemyLasers.push(fireLaser(shot.x, shot.y, shot.tx, shot.ty, shot.id))
+  enemyLasers = stepLasers(enemyLasers, dt, { w: world.w, h: world.h })
+  applyDamage([...checkPlayerHits(liveLasers(enemyLasers), player), ...checkContactDamage(world.objects, player, now)], now)
+  enemyLasers = enemyLasers.filter(l => !l.dead)
+
+  damageFlash = Math.max(0, damageFlash - dt * 2.5)
   particles.forEach(p => { p.age += dt })
   particles = particles.filter(p => p.age < p.life)
   enterRegion(regionAt(world, player.x).index)
@@ -152,7 +196,11 @@ async function boot() {
 
  requestAnimationFrame(frame)
 
- if (import.meta.env.DEV) window.__tl = { world, get player() { return player }, get lasers() { return lasers }, get peers() { return peers }, fireAt, applyHit, input, keys, syncInput, tick, draw: () => renderer.draw({ world, player, peers, lasers, particles, me }, performance.now()) }
+ if (import.meta.env.DEV) window.__tl = {
+  world, get player() { return player }, get lasers() { return lasers }, get enemyLasers() { return enemyLasers }, get peers() { return peers },
+  get health() { return health }, fireAt, applyHit, respawn, input, keys, syncInput, tick,
+  draw: () => renderer.draw({ world, player, peers, lasers, enemyLasers, particles, me, invulnerable: performance.now() < invulnUntil, damageFlash }, performance.now())
+ }
 
  $('#share').onclick = async () => {
   try { await navigator.clipboard.writeText(location.href); toast('Link copied') } catch { toast(location.href) }

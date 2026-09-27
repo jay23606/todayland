@@ -17,6 +17,7 @@
  <div id="stage" class="stage">
   <canvas id="world"></canvas>
   <div id="hud" class="hud">
+   <span class="health"><span class="health-bar"><span id="health-fill"></span></span><span id="health-label">100 / 100</span></span>
    <span id="progress">0 / 0 cleared</span>
    <span id="players">1 exploring now</span>
   </div>
@@ -33,12 +34,14 @@
    <button id="share">Copy a link to today's world</button>
   </div>
  </div>
- <p class="controls">Move with <b>A/D</b> or arrow keys (or the on-screen buttons), jump with <b>W</b>/<b>↑</b>/<b>space</b>. Click or tap anywhere to fire a laser.</p>
+ <p class="controls">Move with <b>A/D</b> or arrow keys (or the on-screen buttons), jump with <b>W</b>/<b>↑</b>/<b>space</b>. Click or tap
+  to fire a laser — some things fight back, so shoot first.</p>
  <p class="about">Every day, several real current headlines (from Wikipedia's news feed, standing in for
   trending topics — there is no free key-less feed of X's own trends) each grow one region of a shared
   side-scrolling world: their words pick a biome and a mood, and the sentiment and actions in the
-  headline become the glow, scale and colour of what's placed there. Everyone who visits today shares
-  the same live world. <a href="https://github.com/jay23606/todayland" target="_blank" rel="noopener">Source</a>.</p>
+  headline become the glow, scale and colour of what's placed there — an "alarming" headline's region
+  fights back, red-ringed things there will shoot or hurt you on contact, so clear them or dodge them.
+  Everyone who visits today shares the same live world. <a href="https://github.com/jay23606/todayland" target="_blank" rel="noopener">Source</a>.</p>
 </main>
 <script type="module" src="/src/main.js"></script>
 </body>
